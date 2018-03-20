@@ -1,0 +1,159 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    tools:context="nacp.nacp.nacp.Activitys.MainForm">
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical"
+        android:paddingBottom="@dimen/activity_vertical_margin"
+        android:paddingLeft="@dimen/activity_horizontal_margin"
+        android:paddingRight="@dimen/activity_horizontal_margin"
+        android:paddingTop="@dimen/activity_vertical_margin"
+        >
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="1. Service Center Information:"
+        android:textSize="15dp"
+        android:textColor="#000000"
+        android:background="@color/colorAccent"
+        android:layout_marginBottom="20dp"/>
+
+    <include
+        android:id="@+id/tab1"
+        layout="@layout/service_center_info"/>
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="2. General Information of Clients:"
+        android:textSize="15dp"
+        android:textColor="#000000"
+        android:background="@color/colorAccent"
+        android:layout_marginBottom="20dp"
+        android:layout_marginTop="20dp"/>
+    <include
+        android:id="@+id/tab1"
+        layout="@layout/general_info_of_clients"/>
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="3. History of using drug:"
+            android:textSize="15dp"
+            android:textColor="#000000"
+            android:background="@color/colorAccent"
+            android:layout_marginBottom="20dp"
+            android:layout_marginTop="20dp"/>
+        <include
+            android:id="@+id/tab1"
+            layout="@layout/history_using_drug"/>
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="4. Injecting Drug Information:"
+            android:textSize="15dp"
+            android:textColor="#000000"
+            android:background="@color/colorAccent"
+            android:layout_marginBottom="20dp"
+            android:layout_marginTop="20dp"/>
+        <include
+            android:id="@+id/tab1"
+            layout="@layout/injecting_drug_info"/>
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="5. Health Related Method:"
+            android:textSize="15dp"
+            android:textColor="#000000"
+            android:background="@color/colorAccent"
+            android:layout_marginBottom="20dp"
+            android:layout_marginTop="20dp"/>
+        <include
+            android:id="@+id/tab1"
+            layout="@layout/health_related_method"/>
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="6. Sexual Activity:"
+            android:textSize="15dp"
+            android:textColor="#000000"
+            android:background="@color/colorAccent"
+            android:layout_marginBottom="20dp"
+            android:layout_marginTop="20dp"/>
+        <include
+            android:id="@+id/tab1"
+            layout="@layout/sexual_activity"/>
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="7. Information about blood infections:"
+            android:textSize="15dp"
+            android:textColor="#000000"
+            android:background="@color/colorAccent"
+            android:layout_marginBottom="20dp"
+            android:layout_marginTop="20dp"/>
+        <include
+            android:id="@+id/tab1"
+            layout="@layout/info_blood_infections"/>
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="8. Family Information(Parents,Spouse,Son,Daughter):"
+            android:textSize="15dp"
+            android:textColor="#000000"
+            android:background="@color/colorAccent"
+            android:layout_marginBottom="20dp"
+            android:layout_marginTop="20dp"/>
+        <include
+            android:id="@+id/tab1"
+            layout="@layout/family_info"/>
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="9. Biometric fingerprint scan"
+            android:textSize="15dp"
+            android:textColor="#000000"
+            android:background="@color/colorAccent"
+            android:layout_marginBottom="20dp"
+            android:layout_marginTop="20dp"/>
+        <include
+            android:id="@+id/tab1"
+            layout="@layout/biometric_fingerorint_scan"/>
+        <include
+            android:id="@+id/tab1"
+            layout="@layout/other_info"/>
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
+        <Button
+            android:id="@+id/btn_FormSave"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:layout_gravity="center_horizontal"
+            android:text="Save"/>
+            <Button
+                android:id="@+id/btn_FormReset"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:layout_gravity="center_horizontal"
+                android:text="Reset"/>
+            <Button
+                android:id="@+id/btn_FormCancel"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:layout_gravity="center_horizontal"
+                android:text="Cancel"/>
+        </LinearLayout>
+    </LinearLayout>
+</ScrollView>
