@@ -12,6 +12,9 @@
     <uses-permission android:name="android.permission.READ_PHONE_STATE" />
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
+    <uses-permission android:name="android.permission.BLUETOOTH" />
+    <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
 
     <application
         android:allowBackup="true"
@@ -32,6 +35,14 @@
         <activity android:name=".Activitys.MainFormActivity" />
         <activity android:name=".Activitys.MainForm" />
         <activity android:name=".Activitys.PatientSchedulling"></activity>
+        <activity android:name=".Driver.EPOSReceiptPrintSampleActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN"/>
+            </intent-filter>
+            <meta-data android:name="android.hardware.usb.action.USB_DEVICE_ATTACHED"
+                android:resource="@xml/device_filter" />
+        </activity>
+        <activity android:name=".Driver.DiscoveryActivity"></activity>
     </application>
 
 </manifest>

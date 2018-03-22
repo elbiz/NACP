@@ -16,13 +16,12 @@ import android.net.Uri;
 import android.os.AsyncTask;
 import android.support.v7.app.ActionBar;
 import android.support.v7.app.AlertDialog;
-import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
 import android.util.Log;
 import android.view.Gravity;
+import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
-import android.view.ViewGroup;
 import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
 import android.widget.Button;
@@ -34,16 +33,10 @@ import android.widget.Spinner;
 import android.widget.TextView;
 import android.widget.Toast;
 
-import com.elbiz.introb.DataObject;
-
 import org.w3c.dom.Attr;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
-import org.w3c.dom.Node;
-import org.w3c.dom.NodeList;
-import org.xml.sax.InputSource;
 
-import java.io.StringReader;
 import java.io.StringWriter;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
@@ -60,6 +53,7 @@ import javax.xml.transform.TransformerFactory;
 import javax.xml.transform.dom.DOMSource;
 import javax.xml.transform.stream.StreamResult;
 
+import nacp.nacp.nacp.Driver.EPOSReceiptPrintSampleActivity;
 import nacp.nacp.nacp.R;
 import nacp.nacp.nacp.WebService.GetDataPostAction;
 import nacp.nacp.nacp.WebService.WebService;
@@ -70,7 +64,7 @@ public class MainForm extends GetDataPostAction {
     private TextView tv_status,tv_otherDrugUsingLocation,tv_otherWhereStayAtNight,tv_otherCurruntUsingDrug,
             tv_otherMethodUseDrug,tv_otherDrugInjectingAtFirt,tv_otherSyringePlace,
             tv_otherInjectedBy,tv_otherTreatmentBy,tv_otherHealthDiseases,tv_otherContactPerson,
-            tv_otherLastContactPerson,tv_otherInformationsource,tv_otherInfromationchannel,tv_otherFamilyRelation,tv_otherFamilyDiseases;
+            tv_otherLastContactPerson,tv_otherInformationsource,tv_otherInfromationchannel,tv_otherFamilyRelation,tv_otherFamilyDiseases,tv_DocName;
 
     //Spinner
     private Spinner sp_NGO,sp_City,sp_ServiceType,sp_SiteOfServices,sp_Sex,sp_Ethnicity,
@@ -81,7 +75,7 @@ public class MainForm extends GetDataPostAction {
             sp_MethodUseDrug,sp_HistoryYear,sp_DrugInjectingAtFirt,sp_SyringeType,sp_SyringePlace,sp_InjectedBy,
             sp_TreatmentBy,sp_BehavedWithYou,sp_HealthDiseases,sp_ContactPerson,sp_LastContactPerson,
             sp_Informationsource,sp_Infromationchannel,sp_familyBehaviour,sp_FamilyRelation,sp_FamilyDiseases,spn_YearImrisoned,
-            spn_YearHowLongSoldBlood,spn_YearSexualContact,sp_ReferedService;
+            spn_YearHowLongSoldBlood,spn_YearSexualContact,sp_ReferedService,sp_ReferedCenter,sp_ReferedBy;
 
     //EditText
     private EditText edt_ServiceCode,edt_ReferralDate,edt_Name,edt_FatherName
@@ -114,8 +108,9 @@ public class MainForm extends GetDataPostAction {
     private String fhealthfacilitycenterid,fcityid,fservicetypeid,
             fserviceid,fage,fgenderid,fethnicityid,fprovinceid,
             fcurrentprovinceid,fmaritalstatusid,fdrugusinglocationid,
-            fnightstayid,fwhenlasttimebloodsold,freferedservicetypeid;
+            fnightstayid,fwhenlasttimebloodsold,freferedservicetypeid,freferedhealthfacilitycenterid,freferedbyserviceproviderid;
 
+    private static final int PICKFILE_RESULT_CODE=12;
 
     // Biometric Device
     private UsbManager manager;
@@ -214,6 +209,7 @@ public class MainForm extends GetDataPostAction {
         tv_otherInfromationchannel=(TextView) findViewById(R.id.tv_otherInfromationchannel);
         tv_otherFamilyRelation=(TextView) findViewById(R.id.tv_otherFamilyRelation);
         tv_otherFamilyDiseases=(TextView) findViewById(R.id.tv_otherFamilyDiseases);
+        tv_DocName=(TextView) findViewById(R.id.tv_DocName);
 
         sp_NGO=(Spinner) findViewById(R.id.sp_NGO);
         sp_City=(Spinner) findViewById(R.id.sp_City);
@@ -255,6 +251,8 @@ public class MainForm extends GetDataPostAction {
         spn_YearHowLongSoldBlood=(Spinner) findViewById(R.id.spn_YearHowLongSoldBlood);
         spn_YearSexualContact=(Spinner) findViewById(R.id.spn_YearSexualContact);
         sp_ReferedService=(Spinner) findViewById(R.id.sp_ReferedService);
+        sp_ReferedCenter=(Spinner) findViewById(R.id.sp_ReferedCenter);
+        sp_ReferedBy=(Spinner) findViewById(R.id.sp_ReferedBy);
 
         edt_ServiceCode=(EditText) findViewById(R.id.edt_ServiceCode);
         edt_ReferralDate=(EditText) findViewById(R.id.edt_ReferralDate);
@@ -450,10 +448,20 @@ public class MainForm extends GetDataPostAction {
     }
 
     @Override
+    public boolean onCreateOptionsMenu(Menu menu) {
+        getMenuInflater().inflate(R.menu.mainform, menu);
+        return true;
+    }
+    @Override
     public boolean onOptionsItemSelected(MenuItem item) {
         switch (item.getItemId()){
             case android.R.id.home: finish();
                 return true;
+            case R.id.action_settings:
+                Intent intent = new Intent(Intent.ACTION_GET_CONTENT);
+                intent.addCategory(Intent.CATEGORY_OPENABLE);
+                intent.setType("*/*");
+                startActivityForResult(intent,PICKFILE_RESULT_CODE);
             default:
                 return super.onOptionsItemSelected(item);}
     }
@@ -662,7 +670,11 @@ public class MainForm extends GetDataPostAction {
                         if (value != null) {
                             showMessageDialogue(value,"SET LINK RESULT");
                         }
-                    } else {
+                    }else if(requestCode==PICKFILE_RESULT_CODE){
+                        String FilePath = data.getData().getPath();
+                        tv_DocName.setText(FilePath);
+                    }
+                    else {
 //                        String str = data.getStringExtra("Setting");
 //                        AuthProcessor aupro = new AuthProcessor();
 //                        aupro.SetSettingsvalue(mcontext);
@@ -843,6 +855,9 @@ public class MainForm extends GetDataPostAction {
         setCachedDataSet(this,"pm.tinformationsource");
 
         setCachedDataSet(this,"hrm.trelation");
+
+        setCachedDataSet(this,"pm.thealthfacilitycenter");
+        setCachedDataSet(this,"pm.tserviceprovider");
 
     }
 
@@ -1373,6 +1388,35 @@ public class MainForm extends GetDataPostAction {
 
                 }
             });
+        }else if(lvname.equals("pm.thealthfacilitycenter")){
+            sp_ReferedCenter.setAdapter(new ArrayAdapter<String>(this,android.R.layout.simple_spinner_dropdown_item,lvHasmap.get("fname")));
+            sp_ReferedCenter.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+                @Override
+                public void onItemSelected(AdapterView<?> adapterView, View view, int i, long l) {
+                    freferedhealthfacilitycenterid=lvHasmap.get("fid").get(i).toString();
+                }
+
+                @Override
+                public void onNothingSelected(AdapterView<?> adapterView) {
+
+                }
+            });
+
+
+        }else if (lvname.equals("pm.tserviceprovider")){
+            sp_ReferedBy.setAdapter(new ArrayAdapter<String>(this,android.R.layout.simple_spinner_dropdown_item,lvHasmap.get("fname")));
+            sp_ReferedBy.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+                @Override
+                public void onItemSelected(AdapterView<?> adapterView, View view, int i, long l) {
+                    freferedbyserviceproviderid= lvHasmap.get("fid").get(i).toString();
+                }
+
+                @Override
+                public void onNothingSelected(AdapterView<?> adapterView) {
+
+                }
+            });
+
         }
     }
 
@@ -1679,12 +1723,23 @@ public class MainForm extends GetDataPostAction {
             rdo_YesFamilyMemberUsingDrug.requestFocus();
             return true;
         }
+        if (sp_ReferedCenter.getSelectedItem().toString() == ""){
+            Toast.makeText(this, "Select Refered Center", Toast.LENGTH_SHORT).show();
+            sp_ReferedCenter.requestFocus();
+            return true;
+        }
 
         if (sp_ReferedService.getSelectedItem().toString() == ""){
             Toast.makeText(this, "Select Refered Service", Toast.LENGTH_SHORT).show();
             sp_ReferedService.requestFocus();
             return true;
         }
+        if (sp_ReferedBy.getSelectedItem().toString() == ""){
+            Toast.makeText(this, "Select Refered By", Toast.LENGTH_SHORT).show();
+            sp_ReferedBy.requestFocus();
+            return true;
+        }
+
 
         return false;
     }
@@ -1786,6 +1841,8 @@ public class MainForm extends GetDataPostAction {
                 "         <freferedservicetypeid>int:"+freferedservicetypeid+"</freferedservicetypeid>\n" +
                 "         <fpreparedby>"+fpreparedby+"</fpreparedby>\n" +
                 "         <fpreparerdesignation>"+fpreparerdesignation+"</fpreparerdesignation>\n" +
+                "         <freferedhealthfacilitycenterid>int:"+freferedhealthfacilitycenterid+"</freferedhealthfacilitycenterid>\n" +
+                "         <freferedbyserviceproviderid>int:"+freferedbyserviceproviderid+"</freferedbyserviceproviderid>\n" +
                 "         <fremark>"+fremark+"</fremark>\n" +
                 "         </Record>\n" +
                 "	</tregdata>"+
@@ -1814,7 +1871,7 @@ public class MainForm extends GetDataPostAction {
     }
 
     @Override
-    protected void onPostExecute(String s) {
+    protected void onPostExecute(final String s) {
         super.onPostExecute(s);
         Log.e("What Is Result", s);
         if(s=="Error occured" || s.equals("Error occured"))
@@ -1833,6 +1890,22 @@ public class MainForm extends GetDataPostAction {
                 @Override
                 public void onClick(DialogInterface dialogInterface, int i) {
                     finish();
+                }
+            });
+            builder.setNegativeButton("Print Reg. No", new DialogInterface.OnClickListener() {
+                @Override
+                public void onClick(DialogInterface dialogInterface, int i) {
+                    finish();
+                    Intent in = getPackageManager().getLaunchIntentForPackage("com.epson.epos2_printer");
+                    in.putExtra("regno",s);
+                    in.putExtra("center", sp_NGO.getSelectedItem().toString()+" ,"+sp_City.getSelectedItem().toString());
+                    in.putExtra("date", edt_ReferralDate.getText().toString());
+                    in.putExtra("servicetype", sp_ServiceType.getSelectedItem().toString());
+                    in.putExtra("service", sp_SiteOfServices.getSelectedItem().toString());
+
+
+                    startActivity(in);
+
                 }
             });
             builder.show();
