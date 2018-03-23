@@ -10,18 +10,22 @@ import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.hardware.usb.UsbDevice;
 import android.hardware.usb.UsbManager;
 import android.net.Uri;
 import android.os.AsyncTask;
+import android.os.Bundle;
+import android.os.Environment;
 import android.support.v7.app.ActionBar;
 import android.support.v7.app.AlertDialog;
-import android.os.Bundle;
 import android.util.Log;
 import android.view.Gravity;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
+import android.view.WindowManager;
 import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
 import android.widget.Button;
@@ -33,10 +37,16 @@ import android.widget.Spinner;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import com.mantra.mfs100.FingerData;
+import com.mantra.mfs100.MFS100;
+import com.mantra.mfs100.MFS100Event;
+
 import org.w3c.dom.Attr;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
 
+import java.io.File;
+import java.io.FileOutputStream;
 import java.io.StringWriter;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
@@ -53,12 +63,12 @@ import javax.xml.transform.TransformerFactory;
 import javax.xml.transform.dom.DOMSource;
 import javax.xml.transform.stream.StreamResult;
 
-import nacp.nacp.nacp.Driver.EPOSReceiptPrintSampleActivity;
+import nacp.nacp.nacp.Activitys.PatientSchedulling;
 import nacp.nacp.nacp.R;
 import nacp.nacp.nacp.WebService.GetDataPostAction;
 import nacp.nacp.nacp.WebService.WebService;
 
-public class MainForm extends GetDataPostAction {
+public class MainForm extends GetDataPostAction implements MFS100Event {
 
     private ImageView imv_BiometricScan,imv_refreshDevice,imv_serviceCalender;
     private TextView tv_status,tv_otherDrugUsingLocation,tv_otherWhereStayAtNight,tv_otherCurruntUsingDrug,
@@ -98,7 +108,7 @@ public class MainForm extends GetDataPostAction {
 
     private ProgressDialog progressBar1;
     //Button
-    private Button btn_FormSave,btn_FormReset,btn_FormCancel;
+    private Button btn_FormSave,btn_FormReset,btn_FormCancel,btn_Scan;
 
 
     private SimpleDateFormat dateFormatter;
@@ -112,29 +122,21 @@ public class MainForm extends GetDataPostAction {
 
     private static final int PICKFILE_RESULT_CODE=12;
 
-    // Biometric Device
-    private UsbManager manager;
-    private boolean storeOpened = false;
-
-    private Spinner rdServices=null;
-
-    private int listCount = 0;
-    List list = null;
-
-    private boolean checkProcRunning = false;
-    private boolean isRDReady = false;
-    private List<String> rdList = null;
-    private int foundPackCount = 0;
-    private int resultCodeRet = 0;
-    private String foundPackName = "";
-    private int processedCount = 0;
-
-    private String fCount="1";
-    private String fType="FRM";
-    private String fform="XML";
-    private String fEnc="PRODUCTION";
 
     private String USERNAME;
+
+    private enum ScannerAction {
+        Capture, Verify
+    }
+    byte[] Enroll_Template;
+    byte[] Verify_Template;
+    private FingerData lastCapFingerData = null;
+    ScannerAction scannerAction = ScannerAction.Capture;
+
+    int timeout = 10000;
+    MFS100 mfs100 = null;
+
+    public static String _testKey = "";
 
     BroadcastReceiver UsbReceiver=new BroadcastReceiver() {
         @Override
@@ -143,33 +145,12 @@ public class MainForm extends GetDataPostAction {
             try {
                 if (UsbManager.ACTION_USB_DEVICE_DETACHED.equals(action)){
 
-                    UsbDevice device=intent.getParcelableExtra(UsbManager.EXTRA_DEVICE);
-                    ScanRDServices();
                     Toast.makeText(MainForm.this, "disconnect", Toast.LENGTH_SHORT).show();
-                    int pid,vid;
-                    pid=device.getProductId();
-                    vid=device.getVendorId();
-                    if ((pid == 0x8226 || pid == 0x8220 || pid == 0x8225) && (vid == 0x0bca)) {
-                        Toast toast = Toast.makeText(MainForm.this,"Startek FM220 Device Disconnected!", Toast.LENGTH_SHORT);
-                        toast.setGravity(Gravity.BOTTOM, 0, 0);
-                        toast.show();
-                    }
 
                 }
                 if (UsbManager.ACTION_USB_DEVICE_ATTACHED.equals(action)){
                     synchronized (this){
-                        UsbDevice device = intent.getParcelableExtra(UsbManager.EXTRA_DEVICE);
-                        ScanRDServices();
                         Toast.makeText(MainForm.this, "connect", Toast.LENGTH_SHORT).show();
-                        if (device != null) {
-                            // call method to set up device communication
-                            int pid, vid;
-                            pid = device.getProductId();
-                            vid = device.getVendorId();
-                            if ((pid == 0x8226 || pid == 0x8220 || pid == 0x8225) && (vid == 0x0bca)) {
-                                SearchPackageName();
-                            }
-                        }
                     }
                 }
 
@@ -326,8 +307,15 @@ public class MainForm extends GetDataPostAction {
         btn_FormSave=(Button) findViewById(R.id.btn_FormSave);
         btn_FormReset=(Button) findViewById(R.id.btn_FormReset);
         btn_FormCancel=(Button) findViewById(R.id.btn_FormCancel);
+        btn_Scan=(Button) findViewById(R.id.btn_scan);
 
         USERNAME= getIntent().getStringExtra("user");
+
+        try {
+            this.getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_HIDDEN);
+        } catch (Exception e) {
+            Log.e("Error", e.toString());
+        }
 
         ArrayList familyBehave=new ArrayList();
         familyBehave.add(" ");
@@ -371,56 +359,19 @@ public class MainForm extends GetDataPostAction {
             }
         });
 
-        manager= (UsbManager) getSystemService(Context.USB_SERVICE);
-        IntentFilter filter=new IntentFilter();
-        filter.addAction(UsbManager.ACTION_USB_DEVICE_ATTACHED);
-        filter.addAction(UsbManager.ACTION_USB_DEVICE_DETACHED);
-        registerReceiver(UsbReceiver,filter);
 
-        for (UsbDevice mdevice : manager.getDeviceList().values()) {
-
-            int pid, vid;
-
-            pid = mdevice.getProductId();
-            vid = mdevice.getVendorId();
-
-            if (((pid == 0x8220) && (vid == 0x0bca))
-                    || ((pid == 0x8220) && (vid == 0x0b39))
-                    || ((pid == 0x8210) && (vid == 0x0b39))
-                    ||  (pid == 0x8225) && (vid == 0x0bca)) {
-                //SearchPackageName();
-                break;
-            }
-
-        }
-        ScanRDServices();
-        rdServices= new Spinner(this);
-        imv_BiometricScan.setOnClickListener(new Button.OnClickListener() {
+        btn_Scan.setOnClickListener(new Button.OnClickListener() {
             @Override
             public void onClick(View v) {
-                try {
-                    String selectedPackage = rdServices.getSelectedItem().toString().split(":")[0];
-                    Intent intent1 = new Intent("in.gov.uidai.rdservice.fp.CAPTURE", null);
-                    String pidOptXML  = createPidOptXML();
-                    Log.e("pidOptXML", pidOptXML);
-
-                    intent1.putExtra("PID_OPTIONS", pidOptXML);
-                    intent1.setPackage(selectedPackage);
-                    startActivityForResult(intent1, 2);
-                } catch (Exception e) {
-                    showMessageDialogue("EXCEPTION- " + e.getMessage(),"EXCEPTION");
-                }
+                scannerAction = ScannerAction.Capture;
+                StartSyncCapture();
 
             }
         });
         imv_refreshDevice.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
-                try {
-                    ScanRDServices();
-                } catch (Exception e) {
-                    showMessageDialogue("EXCEPTION- " + e.getMessage(),"EXCEPTION");
-                }
+                InitScanner();
             }
         });
         onLoad();
@@ -448,6 +399,30 @@ public class MainForm extends GetDataPostAction {
     }
 
     @Override
+    protected void onStart() {
+        if (mfs100 == null) {
+            mfs100 = new MFS100(this);
+            mfs100.SetApplicationContext(this);
+        } else {
+            InitScanner();
+        }
+        super.onStart();
+    }
+
+    protected void onStop() {
+        UnInitScanner();
+        super.onStop();
+    }
+
+    @Override
+    protected void onDestroy() {
+        if (mfs100 != null) {
+            mfs100.Dispose();
+        }
+        super.onDestroy();
+    }
+
+    @Override
     public boolean onCreateOptionsMenu(Menu menu) {
         getMenuInflater().inflate(R.menu.mainform, menu);
         return true;
@@ -465,118 +440,6 @@ public class MainForm extends GetDataPostAction {
             default:
                 return super.onOptionsItemSelected(item);}
     }
-
-    private String createPidOptXML() {
-        String tmpOptXml = "";
-        try{
-            String fTypeStr = "0";
-            String formatStr = "0";
-            String timeOutStr = "20000";
-            String envStr = "P";
-
-            if(fType.equals("FMR")){
-                fTypeStr = "0";
-            }
-
-            if(fform.equals("XML")){
-                formatStr = "0";
-            }
-            timeOutStr = "2000";
-
-
-            if(fEnc.equals("PRODUCTION")){
-                envStr = "P";
-            }
-
-            DocumentBuilderFactory docFactory = DocumentBuilderFactory.newInstance();
-            docFactory.setNamespaceAware(true);
-            DocumentBuilder docBuilder = null;
-
-            docBuilder = docFactory.newDocumentBuilder();
-            Document doc = docBuilder.newDocument();
-            doc.setXmlStandalone(true);
-
-            Element rootElement = doc.createElement("PidOptions");
-            doc.appendChild(rootElement);
-
-            Element opts = doc.createElement("Opts");
-            rootElement.appendChild(opts);
-
-            Attr attr = doc.createAttribute("fCount");
-            attr.setValue(String.valueOf(fCount));
-            opts.setAttributeNode(attr);
-
-            attr = doc.createAttribute("fType");
-            attr.setValue(fTypeStr);
-            opts.setAttributeNode(attr);
-
-            attr = doc.createAttribute("iCount");
-            attr.setValue("0");
-            opts.setAttributeNode(attr);
-
-            attr = doc.createAttribute("iType");
-            attr.setValue("");
-            opts.setAttributeNode(attr);
-
-            attr = doc.createAttribute("pCount");
-            attr.setValue("0");
-            opts.setAttributeNode(attr);
-
-            attr = doc.createAttribute("pType");
-            attr.setValue("");
-            opts.setAttributeNode(attr);
-
-            attr = doc.createAttribute("format");
-            attr.setValue(formatStr);
-            opts.setAttributeNode(attr);
-
-            attr = doc.createAttribute("pidVer");
-            attr.setValue("2.0");
-            opts.setAttributeNode(attr);
-
-            attr = doc.createAttribute("timeout");
-            attr.setValue(timeOutStr);
-            opts.setAttributeNode(attr);
-
-            attr = doc.createAttribute("env");
-            attr.setValue(envStr);
-            opts.setAttributeNode(attr);
-
-
-            attr = doc.createAttribute("posh");
-            attr.setValue("UNKNOWN");
-            opts.setAttributeNode(attr);
-
-            Element custotp = doc.createElement("CustOpts");
-            rootElement.appendChild(custotp);
-
-            Element param = doc.createElement("Param");
-            custotp.appendChild(param);
-
-
-            attr = doc.createAttribute("name");
-            attr.setValue("ValidationKey");
-            param.setAttributeNode(attr);
-
-            TransformerFactory transformerFactory = TransformerFactory.newInstance();
-            Transformer transformer = transformerFactory.newTransformer();
-            transformer.setOutputProperty(OutputKeys.STANDALONE, "yes");
-            DOMSource source = new DOMSource(doc);
-            StringWriter writer = new StringWriter();
-            StreamResult result = new StreamResult(writer);
-            transformer.transform(source, result);
-
-            tmpOptXml = writer.getBuffer().toString().replaceAll("\n|\r", "");
-            tmpOptXml = tmpOptXml.replaceAll("&lt;", "<").replaceAll("&gt;", ">");
-            tmpOptXml = tmpOptXml.replace("<Demo><Demo","<Demo");
-            tmpOptXml = tmpOptXml.replace("</Demo></Demo>","</Demo>");
-
-            return tmpOptXml;
-        }catch(Exception ex){
-            showMessageDialogue("EXCEPTION- " + ex.getMessage(),"EXCEPTION");
-            return "";
-        }
-    }
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         try {
@@ -593,84 +456,7 @@ public class MainForm extends GetDataPostAction {
             } else {
                 super.onActivityResult(requestCode, resultCode, data);
                 if (resultCode == Activity.RESULT_OK) {
-                    if (requestCode == 9000) {
-                        String rd_info1 = data.getStringExtra("RD_SERVICE_INFO");
-                        if (rd_info1 != null && rd_info1.contains("NOTREADY")) {
-                            isRDReady = false;
-                            //CALLBACK METHOD
-                            AddIntoList(foundPackName);
-                        } else if (rd_info1 != null && rd_info1.contains("READY")) {
-                            isRDReady = true;
-                            //CALLBACK METHOD
-                            AddIntoList(foundPackName);
-                        }
-
-                        listCount = listCount + 1;
-                        if(listCount < foundPackCount){
-                            Object rInfo = list.get(listCount);
-                            final String packageName = ((ResolveInfo) rInfo).activityInfo.applicationInfo
-                                    .packageName.trim();
-                            foundPackName = packageName;
-                            Intent intent1 = new Intent("in.gov.uidai.rdservice.fp.INFO", null);
-                            intent1.setPackage(packageName);
-                            startActivityForResult(intent1, 9000);
-                        }
-                    } else if (requestCode >= 100) {
-                        String rd_info = data.getStringExtra("RD_SERVICE_INFO");
-                        if (rd_info != null) {
-                            showMessageDialogue(rd_info,"RD SERVICE INFO XML");
-                        }else{
-                            showMessageDialogue("NULL STRING RETURNED","RD SERVICE INFO XML");
-                        }
-
-                        String dev_info = data.getStringExtra("DEVICE_INFO");
-                        if (dev_info != null) {
-                            showMessageDialogue(dev_info,"DEVICE INFO XML");
-                        }else{
-                            showMessageDialogue("NULL STRING RETURNED","DEVICE INFO XML");
-                        }
-                    } else if (requestCode == 2) {
-                        String pidDataXML = data.getStringExtra("PID_DATA");
-                        if(pidDataXML!= null){
-                            showMessageDialogue(pidDataXML,"PID DATA XML");
-                            System.out.println("Pid "+ pidDataXML);
-                        }else{
-                            showMessageDialogue("NULL STRING RETURNED","PID DATA XML");
-                        }
-//
-                    } else if (requestCode == 3) {
-                        //CAPTURE ONLY
-                    } else if (requestCode == 13) {
-                        String value = data.getStringExtra("CLAIM");
-                        if (value != null) {
-                            showMessageDialogue(value,"INTERFACE CLAIM RESULT");
-                        }
-                    } else if (requestCode == 14) {
-                        String value = data.getStringExtra("RELEASE");
-                        if (value != null) {
-                            showMessageDialogue(value,"INTERFACE RELEASE RESULT");
-                        }
-                    } else if (requestCode == 15) {
-                        String value = data.getStringExtra("SET_REG");
-                        if (value != null) {
-                            showMessageDialogue(value,"REGISTRATION FLAG SET RESULT");
-                        }
-                    } else if (requestCode == 16) {
-                        String value = data.getStringExtra("GET_REG");
-                        if (value != null) {
-                            showMessageDialogue(value,"REGISTRATION FLAG GET RESULT");
-                        }
-                    } else if (requestCode == 17) {
-                        String value = data.getStringExtra("REVOKEREG");
-                        if (value != null) {
-                            showMessageDialogue(value,"REGISTRATION FLAG REVOKE RESULT");
-                        }
-                    }  else if (requestCode == 19) {
-                        String value = data.getStringExtra("SETLINKS");
-                        if (value != null) {
-                            showMessageDialogue(value,"SET LINK RESULT");
-                        }
-                    }else if(requestCode==PICKFILE_RESULT_CODE){
+                    if(requestCode==PICKFILE_RESULT_CODE){
                         String FilePath = data.getData().getPath();
                         tv_DocName.setText(FilePath);
                     }
@@ -691,100 +477,6 @@ public class MainForm extends GetDataPostAction {
         }
     }
 
-    private void AddIntoList(String argPackName) {
-        if(foundPackCount > 1){
-            if (isRDReady) {
-                rdList.add(argPackName + ": READY");
-            } else {
-                rdList.add(argPackName + ": NOTREADY");
-            }
-        }else{
-            if (isRDReady) {
-                rdList.add(argPackName + ": READY");
-            } else {
-                rdList.add(argPackName + ": NOTREADY");
-            }
-        }
-        processedCount++;
-        if(processedCount == foundPackCount){
-            ArrayAdapter<String> adapter = new ArrayAdapter<String>(this,
-                    android.R.layout.simple_spinner_dropdown_item, rdList);
-            rdServices.setAdapter(adapter);
-            tv_status.setText(rdServices.getSelectedItem().toString().split(":")[1]);
-        }
-    }
-
-    private void ScanRDServices() {
-
-        PackageManager pm = this.getPackageManager();
-        Intent intent = new Intent("in.gov.uidai.rdservice.fp.INFO", null);
-        list=pm.queryIntentActivities(intent, PackageManager.PERMISSION_GRANTED);
-        rdList = new ArrayList<>();
-        foundPackCount = 0;
-        foundPackName = "";
-        processedCount = 0;
-        listCount = 0;
-        if (list.size() > 0) {
-            boolean containsFm220Rd = false;
-            for (Object rInfo : list) {
-                final String tmpPackName = ((ResolveInfo) rInfo).activityInfo.applicationInfo
-                        .packageName.trim();
-                if(tmpPackName.contains("com.acpl.registersdk")){
-                    containsFm220Rd = true;
-                    break;
-                }
-            }
-            foundPackCount = list.size();
-
-            if (list.size() > 1) {
-                Object rInfo = list.get(0);
-                final String packageName = ((ResolveInfo) rInfo).activityInfo.applicationInfo
-                        .packageName.trim();
-                foundPackName = packageName;
-                Intent intent1 = new Intent("in.gov.uidai.rdservice.fp.INFO", null);
-                intent1.setPackage(packageName);
-                startActivityForResult(intent1, 9000);
-//                for (Object rInfo : list) {
-//                    final String packageName = ((ResolveInfo) rInfo).activityInfo.applicationInfo
-//                            .packageName.trim();
-//                    foundPackName = packageName;
-//                    checkProcRunning = true;
-//                    boolean isReady = false;
-//                    Intent intent1 = new Intent("in.gov.uidai.rdservice.fp.INFO", null);
-//                    intent1.setPackage(packageName);
-//                    tmpResultCode = tmpResultCode+1;
-//                    resultCodeRet = tmpResultCode;
-//                    startActivityForResult(intent1, tmpResultCode);
-//                }
-            } else {
-                for (Object rInfo : list) {
-                    final String packageName = ((ResolveInfo) rInfo).activityInfo.applicationInfo
-                            .packageName.trim();
-                    foundPackName = packageName;
-
-                    Intent intent1 = new Intent("in.gov.uidai.rdservice.fp.INFO", null);
-                    intent1.setPackage(packageName);
-                    startActivityForResult(intent1, 9000);
-                }
-            }
-        }else{
-            if(!storeOpened){
-                /*storeOpened = true;
-                Toast toast = Toast.makeText(MainForm.this,"Please install `ACPL FM220 Registered Device` Service", Toast.LENGTH_LONG);
-                toast.setGravity(Gravity.TOP, 0, 0);
-                toast.show();*/
-                storeOpened = true;
-                Toast toast = Toast.makeText(MainForm.this,"Please install `ACPL FM220 Registered Device` Service", Toast.LENGTH_LONG);
-                toast.setGravity(Gravity.TOP, 0, 0);
-                toast.show();
-                Intent intentPlay = new Intent(Intent.ACTION_VIEW);
-                intentPlay.setData(Uri.parse("market://details?id=com.acpl.registersdk"));
-                startActivity(intentPlay);
-            }
-
-        }
-
-    }
     private void showMessageDialogue(String messageTxt, String argTitle) {
         new AlertDialog.Builder(MainForm.this)
                 .setCancelable(false)
@@ -797,23 +489,6 @@ public class MainForm extends GetDataPostAction {
                     }
                 })
                 .show();
-    }
-    private void SearchPackageName(){
-        PackageManager pm = this.getPackageManager();
-        String packageName = "com.acpl.registersdk";
-        Intent intent = new Intent();
-        intent.setPackage(packageName);
-        List listTemp = pm.queryIntentActivities(intent, PackageManager.PERMISSION_GRANTED);
-
-        if(listTemp.size() <= 0 &&  !storeOpened){
-            storeOpened = true;
-            Toast toast = Toast.makeText(MainForm.this,"Please install `ACPL FM220 Registered Device` Service.", Toast.LENGTH_LONG);
-            toast.setGravity(Gravity.TOP, 0, 0);
-            toast.show();
-
-        }else{
-            storeOpened = false;
-        }
     }
     private void onLoad(){
 
@@ -933,16 +608,16 @@ public class MainForm extends GetDataPostAction {
         else if(lvname.equals("public.tstate")){
             sp_OriginDistrict.setAdapter(new ArrayAdapter<String>(this,android.R.layout.simple_spinner_dropdown_item,lvHasmap.get("fname")));
 
-           sp_OriginDistrict.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
-               @Override
-               public void onItemSelected(AdapterView<?> adapterView, View view, int i, long l) {
-                   fprovinceid=lvHasmap.get("fid").get(i).toString();
-                   //executeGetdataService(MainForm.this,"SELECT * FROM public.tdistrict where fstateid="+fprovinceid+"","1");
-               }
+            sp_OriginDistrict.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+                @Override
+                public void onItemSelected(AdapterView<?> adapterView, View view, int i, long l) {
+                    fprovinceid=lvHasmap.get("fid").get(i).toString();
+                    //executeGetdataService(MainForm.this,"SELECT * FROM public.tdistrict where fstateid="+fprovinceid+"","1");
+                }
 
-               @Override
-               public void onNothingSelected(AdapterView<?> adapterView) {}
-           });
+                @Override
+                public void onNothingSelected(AdapterView<?> adapterView) {}
+            });
 
             sp_CurrentDistrict.setAdapter(new ArrayAdapter<String>(this,android.R.layout.simple_spinner_dropdown_item,lvHasmap.get("fname")));
             sp_CurrentDistrict.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
@@ -1423,8 +1098,8 @@ public class MainForm extends GetDataPostAction {
     @Override
     public void onPostExecuteGetData(Vector<HashMap> result, String activity) {
         if(activity.equals("1")){
-           final ArrayList<String> fname= new ArrayList<>();
-           final ArrayList<String> fid= new ArrayList<>();
+            final ArrayList<String> fname= new ArrayList<>();
+            final ArrayList<String> fid= new ArrayList<>();
 
             for(int i=0;i<result.size();i++){
                 fname.add(result.get(i).get("fname").toString());
@@ -1507,14 +1182,14 @@ public class MainForm extends GetDataPostAction {
 
             ArrayAdapter<String> adap=new ArrayAdapter<String>(MainForm.this,android.R.layout.simple_spinner_dropdown_item,fname);
             sp_NGO.setAdapter(adap);
-                sp_NGO.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
-                    @Override
-                    public void onItemSelected(AdapterView<?> adapterView, View view, int i, long l) {
-                        fhealthfacilitycenterid=fid.get(i).toString();
-                    }
-                    @Override
-                    public void onNothingSelected(AdapterView<?> adapterView) {}
-                });
+            sp_NGO.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+                @Override
+                public void onItemSelected(AdapterView<?> adapterView, View view, int i, long l) {
+                    fhealthfacilitycenterid=fid.get(i).toString();
+                }
+                @Override
+                public void onNothingSelected(AdapterView<?> adapterView) {}
+            });
 
 
         }
@@ -1749,7 +1424,7 @@ public class MainForm extends GetDataPostAction {
         String fcentercode,fname,fdate,ffatherorhusbandname,fcode,fincomesource,fnightstayother,fcurrentlyusedrugother,fdrugusemethodother,fdrugusingperiod,
                 fdailyexpensefordrug,fdailydrugtime,ftreatmentbyother,fdiseaseother,ffamilybehaviour,fmemberdiseaseother,fpreparedby,fpreparerdesignation,fremark
                 ,fincome, fiseverinjecteddrug,fiseversoldyourblood,fiseverhadsexualcontact,fiseverheardaboutcondom,fisusecondom,fisusecondomatlasttime,
-        fissyringsharingcausedisease,fisinformationabouthiv,fisinformationabouthbv,fisinformationabouthcv,fisanymemilymemberusingdrug,fdrugusinglocationother;
+                fissyringsharingcausedisease,fisinformationabouthiv,fisinformationabouthbv,fisinformationabouthcv,fisanymemilymemberusingdrug,fdrugusinglocationother;
 
 
         fage=edt_Age.getText().toString();
@@ -1852,69 +1527,243 @@ public class MainForm extends GetDataPostAction {
     }
     class SaveReceipt extends AsyncTask<String,Void,String>
     {
-    @Override
-    protected void onPreExecute() {
-        super.onPreExecute();
-        progressBar1 = new ProgressDialog(MainForm.this);
-        progressBar1.setTitle("Progress....");
-        progressBar1.setMessage("Please Wait...");
-        progressBar1.setProgressStyle(TRIM_MEMORY_RUNNING_LOW);
-        progressBar1.show();
-    }
-
-    @Override
-    protected String doInBackground(String... params) {
-        String datap=params[0];
-        WebService mAuth = new WebService();
-        String data1 = mAuth.invokeNACP("registerPatient", datap);
-        return data1;
-    }
-
-    @Override
-    protected void onPostExecute(final String s) {
-        super.onPostExecute(s);
-        Log.e("What Is Result", s);
-        if(s=="Error occured" || s.equals("Error occured"))
-        {
-            Toast.makeText(MainForm.this, ""+s, Toast.LENGTH_SHORT).show();
+        @Override
+        protected void onPreExecute() {
+            super.onPreExecute();
+            progressBar1 = new ProgressDialog(MainForm.this);
+            progressBar1.setTitle("Progress....");
+            progressBar1.setMessage("Please Wait...");
+            progressBar1.setProgressStyle(TRIM_MEMORY_RUNNING_LOW);
+            progressBar1.show();
         }
-        else if(s.startsWith("f"))
-        {
-            Toast.makeText(MainForm.this, ""+s, Toast.LENGTH_SHORT).show();
+
+        @Override
+        protected String doInBackground(String... params) {
+            String datap=params[0];
+            WebService mAuth = new WebService();
+            String data1 = mAuth.invokeNACP("registerPatient", datap);
+            return data1;
         }
-        else {
 
-            AlertDialog.Builder builder= new AlertDialog.Builder(MainForm.this);
-            builder.setTitle("Registration No Is :- "+s);
-            builder.setPositiveButton("Ok", new DialogInterface.OnClickListener() {
-                @Override
-                public void onClick(DialogInterface dialogInterface, int i) {
-                    finish();
-                }
-            });
-            builder.setNegativeButton("Print Reg. No", new DialogInterface.OnClickListener() {
-                @Override
-                public void onClick(DialogInterface dialogInterface, int i) {
-                    finish();
-                    Intent in = getPackageManager().getLaunchIntentForPackage("com.epson.epos2_printer");
-                    in.putExtra("regno",s);
-                    in.putExtra("center", sp_NGO.getSelectedItem().toString()+" ,"+sp_City.getSelectedItem().toString());
-                    in.putExtra("date", edt_ReferralDate.getText().toString());
-                    in.putExtra("servicetype", sp_ServiceType.getSelectedItem().toString());
-                    in.putExtra("service", sp_SiteOfServices.getSelectedItem().toString());
+        @Override
+        protected void onPostExecute(final String s) {
+            super.onPostExecute(s);
+            Log.e("What Is Result", s);
+            if(s=="Error occured" || s.equals("Error occured"))
+            {
+                Toast.makeText(MainForm.this, ""+s, Toast.LENGTH_SHORT).show();
+            }
+            else if(s.startsWith("f"))
+            {
+                Toast.makeText(MainForm.this, ""+s, Toast.LENGTH_SHORT).show();
+            }
+            else {
+
+                AlertDialog.Builder builder= new AlertDialog.Builder(MainForm.this);
+                builder.setTitle("Registration No Is :- "+s);
+                builder.setPositiveButton("Ok", new DialogInterface.OnClickListener() {
+                    @Override
+                    public void onClick(DialogInterface dialogInterface, int i) {
+                        finish();
+                    }
+                });
+                builder.setNegativeButton("Print Reg. No", new DialogInterface.OnClickListener() {
+                    @Override
+                    public void onClick(DialogInterface dialogInterface, int i) {
+                        finish();
+                        Intent in = getPackageManager().getLaunchIntentForPackage("com.epson.epos2_printer");
+                        in.putExtra("regno",s);
+                        in.putExtra("center", sp_NGO.getSelectedItem().toString()+" ,"+sp_City.getSelectedItem().toString());
+                        in.putExtra("date", edt_ReferralDate.getText().toString());
+                        in.putExtra("servicetype", sp_ServiceType.getSelectedItem().toString());
+                        in.putExtra("service", sp_SiteOfServices.getSelectedItem().toString());
 
 
-                    startActivity(in);
+                        startActivity(in);
 
-                }
-            });
-            builder.show();
+                    }
+                });
+                builder.show();
+
+                progressBar1.dismiss();
+            }
 
             progressBar1.dismiss();
+
+        }
+    }
+    private void StartSyncCapture() {
+        new Thread(new Runnable() {
+
+            @Override
+            public void run() {
+                SetTextOnUIThread("");
+                try {
+                    FingerData fingerData = new FingerData();
+                    int ret = mfs100.AutoCapture(fingerData, timeout, false);
+                    Log.e("StartSyncCapture.RET", ""+ret);
+                    if (ret != 0) {
+                        SetTextOnUIThread(mfs100.GetErrorMsg(ret));
+                    } else {
+                        Log.e("Finger Data", fingerData.toString());
+                        lastCapFingerData = fingerData;
+                        final Bitmap bitmap = BitmapFactory.decodeByteArray(fingerData.FingerImage(), 0,
+                                fingerData.FingerImage().length);
+                        MainForm.this.runOnUiThread(new Runnable() {
+                            @Override
+                            public void run() {
+                                imv_BiometricScan.setImageBitmap(bitmap);
+                            }
+                        });
+
+                        SetTextOnUIThread("Capture Success");
+                        String log = "\nQuality: " + fingerData.Quality()
+                                + "\nNFIQ: " + fingerData.Nfiq()
+                                + "\nWSQ Compress Ratio: "
+                                + fingerData.WSQCompressRatio()
+                                + "\nImage Dimensions (inch): "
+                                + fingerData.InWidth() + "\" X "
+                                + fingerData.InHeight() + "\""
+                                + "\nImage Area (inch): " + fingerData.InArea()
+                                + "\"" + "\nResolution (dpi/ppi): "
+                                + fingerData.Resolution() + "\nGray Scale: "
+                                + fingerData.GrayScale() + "\nBits Per Pixal: "
+                                + fingerData.Bpp() + "\nWSQ Info: "
+                                + fingerData.WSQInfo();
+                        SetData2(fingerData);
+                    }
+                } catch (Exception ex) {
+                    SetTextOnUIThread("Error");
+                }
+            }
+        }).start();
+    }
+    private void SetTextOnUIThread(final String str) {
+
+        tv_status.post(new Runnable() {
+            public void run() {
+                tv_status.setText(str);
+            }
+        });
+    }
+    public void SetData2(FingerData fingerData) {
+        if (scannerAction.equals(ScannerAction.Capture)) {
+            Enroll_Template = new byte[fingerData.ISOTemplate().length];
+            System.arraycopy(fingerData.ISOTemplate(), 0, Enroll_Template, 0,
+                    fingerData.ISOTemplate().length);
+        } else if (scannerAction.equals(ScannerAction.Verify)) {
+            Verify_Template = new byte[fingerData.ISOTemplate().length];
+            System.arraycopy(fingerData.ISOTemplate(), 0, Verify_Template, 0,
+                    fingerData.ISOTemplate().length);
+            int ret = mfs100.MatchISO(Enroll_Template, Verify_Template);
+            if (ret < 0) {
+                SetTextOnUIThread("Error: " + ret + "(" + mfs100.GetErrorMsg(ret) + ")");
+            } else {
+                if (ret >= 1400) {
+                    SetTextOnUIThread("Finger matched with score: " + ret);
+                } else {
+                    SetTextOnUIThread("Finger not matched, score: " + ret);
+                }
+            }
         }
 
-        progressBar1.dismiss();
-
+        WriteFile("Raw.raw", fingerData.RawData());
+        WriteFile("Bitmap.bmp", fingerData.FingerImage());
+        WriteFile("ISOTemplate.iso", fingerData.ISOTemplate());
     }
-}
+    private void WriteFile(String filename, byte[] bytes) {
+        try {
+            String path = Environment.getExternalStorageDirectory()
+                    + "//FingerData";
+            File file = new File(path);
+            if (!file.exists()) {
+                file.mkdirs();
+            }
+            path = path + "//" + filename;
+            file = new File(path);
+            if (!file.exists()) {
+                file.createNewFile();
+            }
+            FileOutputStream stream = new FileOutputStream(path);
+            stream.write(bytes);
+            stream.close();
+        } catch (Exception e1) {
+            e1.printStackTrace();
+        }
+    }
+    private void InitScanner() {
+        try {
+            int ret = mfs100.Init();
+            if (ret != 0) {
+                SetTextOnUIThread(mfs100.GetErrorMsg(ret));
+            } else {
+                SetTextOnUIThread("Init success");
+                String info = "Serial: " + mfs100.GetDeviceInfo().SerialNo()
+                        + " Make: " + mfs100.GetDeviceInfo().Make()
+                        + " Model: " + mfs100.GetDeviceInfo().Model()
+                        + "\nCertificate: " + mfs100.GetCertification();
+            }
+        } catch (Exception ex) {
+            Toast.makeText(this, "Init failed, unhandled exception",
+                    Toast.LENGTH_LONG).show();
+            SetTextOnUIThread("Init failed, unhandled exception");
+        }
+    }
+    private void UnInitScanner() {
+        try {
+            int ret = mfs100.UnInit();
+            if (ret != 0) {
+                SetTextOnUIThread(mfs100.GetErrorMsg(ret));
+            } else {
+                SetTextOnUIThread("Uninit Success");
+                lastCapFingerData = null;
+            }
+        } catch (Exception e) {
+            Log.e("UnInitScanner.EX", e.toString());
+        }
+    }
+    @Override
+    public void OnDeviceAttached(int vid, int pid, boolean hasPermission) {
+        int ret;
+        if (!hasPermission) {
+            SetTextOnUIThread("Permission denied");
+            return;
+        }
+        if (vid == 1204 || vid == 11279) {
+            if (pid == 34323) {
+                ret = mfs100.LoadFirmware();
+                if (ret != 0) {
+                    SetTextOnUIThread(mfs100.GetErrorMsg(ret));
+                } else {
+                    SetTextOnUIThread("Load firmware success");
+                }
+            } else if (pid == 4101) {
+                String key = "Without Key";
+                ret = mfs100.Init("");
+                if (ret == -1322) {
+                    key = "Test Key";
+                    ret = mfs100.Init(_testKey);
+                }
+                if (ret == 0) {
+                    Log.e("Key ",key);
+                } else {
+                    SetTextOnUIThread(mfs100.GetErrorMsg(ret));
+                }
+
+            }
+        }
+    }
+    @Override
+    public void OnDeviceDetached() {
+        UnInitScanner();
+        SetTextOnUIThread("Device removed");
+    }
+
+    @Override
+    public void OnHostCheckFailed(String err) {
+        try {
+            Toast.makeText(this, err, Toast.LENGTH_LONG).show();
+        } catch (Exception ignored) {
+        }
+    }
 }

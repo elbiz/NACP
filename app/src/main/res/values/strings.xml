@@ -74,4 +74,27 @@
     <string name="handlingmsg_err_wrong_paper">Please set correct roll paper.\n</string>
     <string name="handlingmsg_err_battery_real_end">Please connect AC adapter or change the battery.\nBattery of printer is almost empty.\n</string>
     <string name="handlingmsg_err_offline">Printer is offline.\n</string>
+
+
+
+    <string name="Init">INIT</string>
+    <string name="UnInit">UNINIT</string>
+    <string name="ExtractISO">ISO(FMR)</string>
+    <string name="ExtractWSQ">WSQ</string>
+    <string name="MatchISO">MATCH ISO</string>
+    <string name="foorLoop">Init/Uninit</string>
+    <string name="ClearLog">Refresh</string>
+    <string name="SyncCapture">CAPTURE</string>
+    <string name="StopSyncCapture">STOP</string>
+    <string name="WriteBit">Write Bit</string>
+    <string name="ReadBit">Read Bit</string>
+    <string name="ChangeKey">Change Key</string>
+    <string name="GetKey">Get Key</string>
+
+    <string-array name="MFS100Ver">
+        <item>41</item>
+        <item>31</item>
+    </string-array>
+
+    <string name="title_activity_preference">Preference</string>
 </resources>

@@ -125,7 +125,7 @@
             android:layout_marginTop="20dp"/>
         <include
             android:id="@+id/tab1"
-            layout="@layout/biometric_fingerorint_scan"/>
+            layout="@layout/biometric_fingerorint_scan_match"/>
         <include
             android:id="@+id/tab1"
             layout="@layout/other_info"/>
